@@ -1,0 +1,133 @@
+#include <BleKeyboard.h>
+
+BleKeyboard bleKeyboard("Teclado Braille", "ESP32", 100);
+
+// Pinos dos 6 botões de pontos Braille
+const int btnPinos[6] = {2, 4, 5, 18, 19, 21};
+
+// Botões especiais
+const int btnEspaco = 13;
+const int btnTab = 14;
+const int btnShift = 25;
+const int btnCtrl = 26;
+const int btnFixa = 27;
+const int btnModo = 33;
+const int btnEnter = 32; // NOVO botão Enter
+
+bool modoNumerico = false;
+
+// Mapeamento Braille
+struct Braille {
+  byte pontos;
+  char letra;
+};
+
+// Letras
+Braille brailleAlfabeto[] = {
+  {B000001, 'a'}, {B000011, 'b'}, {B000101, 'c'}, {B001101, 'd'}, {B001001, 'e'},
+  {B000111, 'f'}, {B001111, 'g'}, {B001011, 'h'}, {B000110, 'i'}, {B001110, 'j'},
+  {B000001 | B000100, 'k'}, {B000011 | B000100, 'l'}, {B000101 | B000100, 'm'},
+  {B001101 | B000100, 'n'}, {B001001 | B000100, 'o'}, {B000111 | B000100, 'p'},
+  {B001111 | B000100, 'q'}, {B001011 | B000100, 'r'}, {B000110 | B000100, 's'},
+  {B001110 | B000100, 't'}, {B000001 | B001000, 'u'}, {B000011 | B001000, 'v'},
+  {B001110 | B001000, 'w'}, {B000101 | B001000, 'x'}, {B001101 | B001000, 'y'},
+  {B001001 | B001000, 'z'}
+};
+
+// Números
+Braille brailleNumeros[] = {
+  {B001110, '0'}, {B000001, '1'}, {B000011, '2'}, {B000101, '3'}, {B001101, '4'},
+  {B001001, '5'}, {B000111, '6'}, {B001111, '7'}, {B001011, '8'}, {B000110, '9'}
+};
+
+void setup() {
+  Serial.begin(115200);
+  bleKeyboard.begin();
+
+  for (int i = 0; i < 6; i++) pinMode(btnPinos[i], INPUT_PULLUP);
+
+  pinMode(btnEspaco, INPUT_PULLUP);
+  pinMode(btnTab, INPUT_PULLUP);
+  pinMode(btnShift, INPUT_PULLUP);
+  pinMode(btnCtrl, INPUT_PULLUP);
+  pinMode(btnFixa, INPUT_PULLUP);
+  pinMode(btnModo, INPUT_PULLUP);
+  pinMode(btnEnter, INPUT_PULLUP); // Botão Enter
+}
+
+void loop() {
+  if (bleKeyboard.isConnected()) {
+    byte codigo = lerPontos();
+
+    if (codigo > 0) {
+      char caractere = buscaCaractere(codigo);
+      if (caractere != 0) {
+        bleKeyboard.print(caractere);
+        delay(500); // debounce
+      }
+    }
+
+    if (!digitalRead(btnEspaco)) {
+      bleKeyboard.write(' ');
+      delay(300);
+    }
+
+    if (!digitalRead(btnTab)) {
+      bleKeyboard.write(KEY_TAB);
+      delay(300);
+    }
+
+    if (!digitalRead(btnShift)) {
+      bleKeyboard.press(KEY_LEFT_SHIFT);
+      delay(300);
+      bleKeyboard.release(KEY_LEFT_SHIFT);
+    }
+
+    if (!digitalRead(btnCtrl)) {
+      bleKeyboard.press(KEY_LEFT_CTRL);
+      delay(300);
+      bleKeyboard.release(KEY_LEFT_CTRL);
+    }
+
+    if (!digitalRead(btnFixa)) {
+      bleKeyboard.press(KEY_CAPS_LOCK);
+      delay(300);
+      bleKeyboard.release(KEY_CAPS_LOCK);
+    }
+
+    if (!digitalRead(btnModo)) {
+      modoNumerico = !modoNumerico;
+      delay(500);
+    }
+
+    if (!digitalRead(btnEnter)) {
+      bleKeyboard.write(KEY_RETURN); // Tecla Enter
+      delay(300);
+    }
+  }
+
+  delay(10);
+}
+
+byte lerPontos() {
+  byte codigo = 0;
+  for (int i = 0; i < 6; i++) {
+    if (!digitalRead(btnPinos[i])) {
+      codigo |= (1 << i);
+    }
+  }
+  return codigo;
+}
+
+char buscaCaractere(byte codigo) {
+  if (modoNumerico) {
+    for (auto b : brailleNumeros) {
+      if (b.pontos == codigo) return b.letra;
+    }
+  } else {
+    for (auto b : brailleAlfabeto) {
+      if (b.pontos == codigo) return b.letra;
+    }
+  }
+  return 0;
+}
